@@ -5,7 +5,8 @@ use std::io::Read;
 // mod day03;
 // mod day04;
 // mod day05;
-mod day06;
+// mod day06;
+mod day07;
 
 fn run(day: u32, solve_fn: fn(&str)) {
     let mut input_file =
@@ -19,5 +20,5 @@ fn run(day: u32, solve_fn: fn(&str)) {
 }
 
 fn main() {
-    run(6, day06::solve);
+    run(7, day07::solve);
 }
