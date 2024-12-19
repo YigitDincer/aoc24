@@ -1,3 +1,5 @@
+use std::{fs::File, io::Read};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Position {
     row: usize,
@@ -157,6 +159,30 @@ fn move_elem_into_2(
         }
     }
 
+    if direction == Direction::Up || direction == Direction::Down {
+        if elem_to_move == ']'
+            && grid
+                .get(&Position {
+                    row: new_pos.row,
+                    col: new_pos.col - 1,
+                })
+                .unwrap()
+                == '#'
+        {
+            return;
+        } else if elem_to_move == '['
+            && grid
+                .get(&Position {
+                    row: new_pos.row,
+                    col: new_pos.col + 1,
+                })
+                .unwrap()
+                == '#'
+        {
+            return;
+        }
+    }
+
     if elem_to_move == ']' && (direction == Direction::Up || direction == Direction::Down) {
         if grid.get(&new_pos).unwrap() == '.'
             && grid
@@ -235,7 +261,19 @@ fn move_elem_into_2(
 fn move_robot_2(grid: &Grid, sequence: &str) -> Grid {
     let mut grid = grid.clone();
 
+    let mut ctr = 1;
+
     for dir in sequence.chars() {
+        let mut input_file =
+            File::open(format!("steps/after_{ctr}.txt")).expect("Opening file failed!");
+
+        let mut input = String::new();
+        input_file
+            .read_to_string(&mut input)
+            .expect("Reading file failed!");
+
+        let parsed = parse(input.trim());
+
         let robot_pos = grid
             .data
             .iter()
@@ -253,7 +291,19 @@ fn move_robot_2(grid: &Grid, sequence: &str) -> Grid {
             '<' => Direction::Left,
             _ => panic!("Invalid direction in sequence"),
         };
+
+        grid.print();
+        dbg!(dir);
+
         move_elem_into_2(&mut grid, &robot_pos, direction, '@');
+
+        if parsed.map != grid {
+            println!("Failed at step {}", ctr);
+            grid.print();
+            break;
+        }
+
+        ctr += 1;
     }
 
     grid
@@ -443,11 +493,11 @@ v^^>>><<^^<>>^v^<v^vv<>v^<<>^<^v^v><^<<<><<^<v><v<>vv>>v><v^<vv<>v^<<^";
 
     const CUSTOM_1: &str = "#########
 #........
-#...[]..#
-#.[]..[].
-#.[][]...
+#..[]..#.
+#..#..[].
 #..[]....
-#.@......
+#........
+#...@....
 
 ^^";
 
