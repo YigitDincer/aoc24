@@ -124,7 +124,7 @@ fn remove_finished_paths_calc_score(paths: &Vec<Vec<Elem>>) -> (usize, Vec<Vec<E
     (min_score, best_paths)
 }
 
-fn calc_score(path: &Vec<Elem>) -> usize {
+fn calc_score(path: &Vec<Elem>) -> (usize, usize) {
     let mut score = 0;
 
     let mut prev_orientation = 0;
@@ -151,24 +151,40 @@ fn calc_score(path: &Vec<Elem>) -> usize {
         }
     }
 
-    score
+    (score, prev_orientation)
 }
 
-fn remove_inefficient_paths(cache: &mut HashMap<Elem, usize>, current_paths: &mut Vec<Vec<Elem>>) {
+fn remove_inefficient_paths(
+    cache: &mut HashMap<Elem, (usize, usize)>,
+    current_paths: &mut Vec<Vec<Elem>>,
+) {
     let mut next_paths = Vec::new();
 
     for current_path in current_paths.iter() {
         let current_loc = current_path.last().unwrap();
 
-        let new_score = calc_score(current_path);
+        let (mut new_score, last_orientation) = calc_score(current_path);
 
-        if let Some(&value) = cache.get(current_loc) {
-            if new_score < value {
-                cache.insert(current_loc.clone(), new_score);
-                next_paths.push(current_path.clone());
+        if let Some(&value) = cache.get(&current_loc) {
+            if last_orientation != value.1 {
+                new_score += 0;
             }
+            if new_score < value.0 {
+                cache.insert(current_loc.clone(), (new_score, last_orientation));
+                next_paths.push(current_path.clone());
+                continue;
+            }
+
+            // if current_path.len() > 20 {
+            //     let cache_val = cache.get(&current_loc).unwrap();
+            //     //println!("Removing because: {new_score} is worse than found {cache_val}");
+            //     for elem in current_path {
+            //         print!("{elem}");
+            //     }
+            //     println!("");
+            // }
         } else {
-            cache.insert(current_loc.clone(), new_score);
+            cache.insert(current_loc.clone(), (new_score, last_orientation));
             next_paths.push(current_path.clone());
         }
     }
@@ -188,23 +204,28 @@ fn solve_1(grid: &Vec<Elem>) -> (usize, usize) {
 
     let mut minimum = usize::MAX;
 
-    let mut cache: HashMap<Elem, usize> = HashMap::new();
+    let mut cache: HashMap<Elem, (usize, usize)> = HashMap::new();
 
     let mut best_pathss = Vec::new();
 
     while !possible_paths.is_empty() {
         let mut current_paths = visit_next(grid, &mut possible_paths);
 
-        remove_inefficient_paths(&mut cache, &mut current_paths);
-
         let (score, best_paths) = remove_finished_paths_calc_score(&current_paths);
 
         minimum = std::cmp::min(minimum, score);
         if minimum == score {
             for best_path in best_paths {
-                best_pathss.push(best_path);
+                best_pathss.push(best_path.clone());
+                // println!("Pushing best path");
+                // for elem in best_path {
+                //     print!("{elem}");
+                // }
+                // println!("");
             }
         }
+
+        remove_inefficient_paths(&mut cache, &mut current_paths);
 
         current_paths.retain(|path| path.last().unwrap().tile != Tile::End);
 
@@ -214,7 +235,7 @@ fn solve_1(grid: &Vec<Elem>) -> (usize, usize) {
     let mut really_best = Vec::new();
 
     for path in best_pathss {
-        if calc_score(&path) == minimum {
+        if calc_score(&path).0 == minimum {
             really_best.push(path);
         }
     }

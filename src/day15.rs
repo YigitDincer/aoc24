@@ -1,9 +1,32 @@
-use std::{fs::File, io::Read};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Position {
     row: usize,
     col: usize,
+}
+
+impl Position {
+    fn go_to(&self, direction: Direction) -> Position {
+        match direction {
+            Direction::Up => Position {
+                row: self.row - 1,
+                col: self.col,
+            },
+            Direction::Right => Position {
+                row: self.row,
+                col: self.col + 1,
+            },
+            Direction::Down => Position {
+                row: self.row + 1,
+                col: self.col,
+            },
+            Direction::Left => Position {
+                row: self.row,
+                col: self.col - 1,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -35,6 +58,10 @@ impl Grid {
         }
     }
 
+    fn set(&mut self, position: &Position, value: char) {
+        self.data[position.row * self.width + position.col] = value;
+    }
+
     fn print(&self) {
         for row in 0..self.height {
             for col in 0..self.width {
@@ -59,28 +86,17 @@ enum Direction {
     Left,
 }
 
-fn move_into(direction: Direction, position: &Position) -> Position {
-    match direction {
-        Direction::Up => Position {
-            row: position.row - 1,
-            col: position.col,
-        },
-        Direction::Right => Position {
-            row: position.row,
-            col: position.col + 1,
-        },
-        Direction::Down => Position {
-            row: position.row + 1,
-            col: position.col,
-        },
-        Direction::Left => Position {
-            row: position.row,
-            col: position.col - 1,
-        },
+impl Direction {
+    fn is_vertical(self) -> bool {
+        self == Direction::Up || self == Direction::Down
+    }
+
+    fn is_horizontal(self) -> bool {
+        self == Direction::Left || self == Direction::Right
     }
 }
 
-fn move_elem_into_1(
+fn move_boxes_in_direction(
     grid: &mut Grid,
     elem_pos: &Position,
     direction: Direction,
@@ -94,24 +110,24 @@ fn move_elem_into_1(
 
     let old_pos_idx = elem_pos.row * grid.width + elem_pos.col;
 
-    let new_pos = move_into(direction, elem_pos);
+    let new_pos = elem_pos.go_to(direction);
     let new_pos_idx = new_pos.row * grid.width + new_pos.col;
 
     if grid.get(&new_pos).unwrap() == '.' {
         grid.data[new_pos_idx] = elem_to_move;
         grid.data[old_pos_idx] = '.';
     } else if grid.get(&new_pos).unwrap() == 'O' {
-        move_elem_into_1(grid, &new_pos, direction, 'O');
+        move_boxes_in_direction(grid, &new_pos, direction, 'O');
 
         if grid.data != grid_original {
-            move_elem_into_1(grid, &elem_pos, direction, elem_to_move);
+            move_boxes_in_direction(grid, &elem_pos, direction, elem_to_move);
         }
     } else {
         return;
     }
 }
 
-fn move_robot_1(grid: &Grid, sequence: &str) -> Grid {
+fn apply_sequence(grid: &Grid, sequence: &str) -> Grid {
     let mut grid = grid.clone();
 
     for dir in sequence.chars() {
@@ -132,148 +148,107 @@ fn move_robot_1(grid: &Grid, sequence: &str) -> Grid {
             '<' => Direction::Left,
             _ => panic!("Invalid direction in sequence"),
         };
-        move_elem_into_1(&mut grid, &robot_pos, direction, '@');
+        move_boxes_in_direction(&mut grid, &robot_pos, direction, '@');
     }
 
     grid
 }
 
-fn move_elem_into_2(
-    grid: &mut Grid,
-    elem_pos: &Position,
+fn is_wall(grid: &Grid, position: &Position) -> bool {
+    grid.get(position).unwrap() == '#'
+}
+
+fn is_empty(grid: &Grid, position: &Position) -> bool {
+    grid.get(position).unwrap() == '.'
+}
+
+fn move_2d_boxes_in_direction(
+    grid: &Grid,
+    old_pos: &Position,
     direction: Direction,
     elem_to_move: char,
-) {
-    let grid_original = grid.data.clone();
+) -> (HashSet<Position>, bool) {
+    dbg!(old_pos);
+    let new_pos = old_pos.go_to(direction);
 
-    let old_pos_idx = elem_pos.row * grid.width + elem_pos.col;
-
-    let new_pos = move_into(direction, elem_pos);
-    let new_pos_idx = new_pos.row * grid.width + new_pos.col;
-
-    if direction == Direction::Left || direction == Direction::Right || elem_to_move == '@' {
-        if grid.get(&new_pos).unwrap() == '.' {
-            grid.data[new_pos_idx] = elem_to_move;
-            grid.data[old_pos_idx] = '.';
-            return;
-        }
-    }
-
-    if direction == Direction::Up || direction == Direction::Down {
-        if elem_to_move == ']'
-            && grid
-                .get(&Position {
-                    row: new_pos.row,
-                    col: new_pos.col - 1,
-                })
-                .unwrap()
-                == '#'
+    if (direction.is_horizontal() || elem_to_move == '@') && is_empty(grid, &new_pos) {
+        return (HashSet::from([*old_pos]), true);
+    } else if direction.is_vertical() {
+        if is_wall(grid, &new_pos)
+            && (elem_to_move == ']' && is_wall(grid, &new_pos.go_to(Direction::Left)))
+            || (elem_to_move == '[' && is_wall(grid, &new_pos.go_to(Direction::Right)))
         {
-            return;
+            return (HashSet::new(), false);
+        } else if elem_to_move == ']'
+            && is_empty(grid, &new_pos)
+            && is_empty(grid, &new_pos.go_to(Direction::Left))
+        {
+            return (
+                HashSet::from([*old_pos, old_pos.go_to(Direction::Left)]),
+                true,
+            );
         } else if elem_to_move == '['
-            && grid
-                .get(&Position {
-                    row: new_pos.row,
-                    col: new_pos.col + 1,
-                })
-                .unwrap()
-                == '#'
+            && is_empty(grid, &new_pos)
+            && is_empty(grid, &new_pos.go_to(Direction::Right))
         {
-            return;
+            return (
+                HashSet::from([*old_pos, old_pos.go_to(Direction::Right)]),
+                true,
+            );
         }
     }
 
-    if elem_to_move == ']' && (direction == Direction::Up || direction == Direction::Down) {
-        if grid.get(&new_pos).unwrap() == '.'
-            && grid
-                .get(&Position {
-                    row: new_pos.row,
-                    col: new_pos.col - 1,
-                })
-                .unwrap()
-                == '.'
-        {
-            grid.data[new_pos_idx] = ']';
-            grid.data[new_pos_idx - 1] = '[';
-            grid.data[old_pos_idx] = '.';
-            grid.data[old_pos_idx - 1] = '.';
-            return;
+    if direction.is_horizontal()
+        && (grid.get(&new_pos).unwrap() == '[' || grid.get(&new_pos).unwrap() == ']')
+    {
+        let mut boxes_to_move =
+            move_2d_boxes_in_direction(grid, &new_pos, direction, grid.get(&new_pos).unwrap());
+
+        if boxes_to_move.0.len() > 0 {
+            let more_boxes = move_2d_boxes_in_direction(grid, &old_pos, direction, elem_to_move);
+            boxes_to_move.0.extend(more_boxes.0);
+            boxes_to_move.1 &= more_boxes.1;
         }
-    } else if elem_to_move == '[' && (direction == Direction::Up || direction == Direction::Down) {
-        if grid.get(&new_pos).unwrap() == '.'
-            && grid
-                .get(&Position {
-                    row: new_pos.row,
-                    col: new_pos.col + 1,
-                })
-                .unwrap()
-                == '.'
-        {
-            grid.data[new_pos_idx] = '[';
-            grid.data[new_pos_idx + 1] = ']';
-            grid.data[old_pos_idx] = '.';
-            grid.data[old_pos_idx + 1] = '.';
-            return;
-        }
+
+        return boxes_to_move;
     }
 
-    if direction == Direction::Left || direction == Direction::Right {
-        if grid.get(&new_pos).unwrap() == '[' || grid.get(&new_pos).unwrap() == ']' {
-            move_elem_into_2(grid, &new_pos, direction, grid.get(&new_pos).unwrap());
-
-            if grid.data != grid_original {
-                move_elem_into_2(grid, &elem_pos, direction, elem_to_move);
-            }
-        }
-    }
-
-    if direction == Direction::Up || direction == Direction::Down {
+    if direction.is_vertical() {
         if grid.get(&new_pos).unwrap() == ']' || grid.get(&new_pos).unwrap() == '[' {
-            move_elem_into_2(grid, &new_pos, direction, grid.get(&new_pos).unwrap());
+            let mut boxes_to_move =
+                move_2d_boxes_in_direction(grid, &new_pos, direction, grid.get(&new_pos).unwrap());
 
-            if grid.data != grid_original {
-                move_elem_into_2(grid, &elem_pos, direction, elem_to_move);
+            if boxes_to_move.0.len() > 0 {
+                let more_boxes =
+                    move_2d_boxes_in_direction(grid, &old_pos, direction, elem_to_move);
+                boxes_to_move.0.extend(more_boxes.0);
+                boxes_to_move.1 &= more_boxes.1;
             }
+            return boxes_to_move;
         } else if elem_to_move == ']' && grid.get(&new_pos).unwrap() == '.' {
-            move_elem_into_2(
+            return move_2d_boxes_in_direction(
                 grid,
-                &Position {
-                    row: elem_pos.row,
-                    col: elem_pos.col - 1,
-                },
+                &old_pos.go_to(Direction::Left),
                 direction,
                 '[',
             );
         } else if elem_to_move == '[' && grid.get(&new_pos).unwrap() == '.' {
-            move_elem_into_2(
+            return move_2d_boxes_in_direction(
                 grid,
-                &Position {
-                    row: elem_pos.row,
-                    col: elem_pos.col + 1,
-                },
+                &old_pos.go_to(Direction::Right),
                 direction,
                 ']',
             );
         }
     }
+
+    return (HashSet::new(), true);
 }
 
-fn move_robot_2(grid: &Grid, sequence: &str) -> Grid {
+fn apply_sequence_for_extended_map(grid: &Grid, sequence: &str) -> Grid {
     let mut grid = grid.clone();
 
-    let mut ctr = 1;
-
     for dir in sequence.chars() {
-        let mut input_file =
-            File::open(format!("steps/after_{ctr}.txt")).expect("Opening file failed!");
-
-        let mut input = String::new();
-        input_file
-            .read_to_string(&mut input)
-            .expect("Reading file failed!");
-
-        let parsed = parse(input.trim());
-
         let robot_pos = grid
             .data
             .iter()
@@ -292,18 +267,24 @@ fn move_robot_2(grid: &Grid, sequence: &str) -> Grid {
             _ => panic!("Invalid direction in sequence"),
         };
 
-        grid.print();
-        dbg!(dir);
+        let (boxes_to_move, is_movable) =
+            move_2d_boxes_in_direction(&grid, &robot_pos, direction, '@');
 
-        move_elem_into_2(&mut grid, &robot_pos, direction, '@');
+        if is_movable {
+            let orig_pos: HashSet<_> = boxes_to_move
+                .iter()
+                .map(|pos| (pos, grid.get(&pos).unwrap()))
+                .collect();
 
-        if parsed.map != grid {
-            println!("Failed at step {}", ctr);
-            grid.print();
-            break;
+            for (pos, _) in orig_pos.clone() {
+                grid.set(&pos, '.');
+            }
+
+            for (pos, ch) in orig_pos {
+                let new_pos = pos.go_to(direction);
+                grid.set(&new_pos, ch);
+            }
         }
-
-        ctr += 1;
     }
 
     grid
@@ -361,7 +342,7 @@ fn extend(grid: &mut Grid) {
 }
 
 fn solve_1(input: &Input) -> usize {
-    let grid = move_robot_1(&input.map, &input.sequence);
+    let grid = apply_sequence(&input.map, &input.sequence);
     calculate_grid(&grid)
 }
 
@@ -369,7 +350,7 @@ fn solve_2(input: &Input) -> usize {
     let mut input = input.clone();
 
     extend(&mut input.map);
-    let grid = move_robot_2(&input.map, &input.sequence);
+    let grid = apply_sequence_for_extended_map(&input.map, &input.sequence);
     calculate_grid(&grid)
 }
 
@@ -491,10 +472,10 @@ v^^>>><<^^<>>^v^<v^vv<>v^<<>^<^v^v><^<<<><<^<v><v<>vv>>v><v^<vv<>v^<<^";
 ##......[][]..[]..##
 ####################";
 
-    const CUSTOM_1: &str = "#########
+    const CUSTOM: &str = "#########
 #........
 #..[]..#.
-#..#..[].
+#.#...[].
 #..[]....
 #........
 #...@....
@@ -512,7 +493,7 @@ v^^>>><<^^<>>^v^<v^vv<>v^<<>^<^v^v><^<<<><<^<v><v<>vv>>v><v^<vv<>v^<<^";
     #[test]
     fn test_move_robot() {
         let parsed = parse(EXAMPLE);
-        let grid = move_robot_1(&parsed.map, &parsed.sequence);
+        let grid = apply_sequence(&parsed.map, &parsed.sequence);
         assert_eq!(calculate_grid(&grid), 2028);
     }
 
@@ -548,7 +529,7 @@ v^^>>><<^^<>>^v^<v^vv<>v^<<>^<^v^v><^<<<><<^<v><v<>vv>>v><v^<vv<>v^<<^";
         let parsed_extended = parse(EXAMPLE2_EXTENDED);
         assert_eq!(parsed.map, parsed_extended.map);
 
-        let grid = move_robot_2(&parsed_extended.map, &parsed.sequence);
+        let grid = apply_sequence_for_extended_map(&parsed_extended.map, &parsed.sequence);
         let parsed_extended_end = parse(EXAMPLE2_EXTENDED_END);
         assert_eq!(grid, parsed_extended_end.map);
     }
@@ -556,7 +537,7 @@ v^^>>><<^^<>>^v^<v^vv<>v^<<>^<^v^v><^<<<><<^<v><v<>vv>>v><v^<vv<>v^<<^";
     #[test]
     fn test_large_extended_move_robot() {
         let parsed = parse(LARGE_EXAMPLE_EXTENDED);
-        let grid = move_robot_2(&parsed.map, &parsed.sequence);
+        let grid = apply_sequence_for_extended_map(&parsed.map, &parsed.sequence);
         let parsed_extended_end = parse(LARGE_EXAMPLE_EXTENDED_END);
         grid.print();
         assert_eq!(grid, parsed_extended_end.map);
@@ -564,8 +545,8 @@ v^^>>><<^^<>>^v^<v^vv<>v^<<>^<^v^v><^<<<><<^<v><v<>vv>>v><v^<vv<>v^<<^";
 
     #[test]
     fn test_custom() {
-        let parsed = parse(CUSTOM_1);
-        let grid = move_robot_2(&parsed.map, &parsed.sequence);
+        let parsed = parse(CUSTOM);
+        let grid = apply_sequence_for_extended_map(&parsed.map, &parsed.sequence);
         grid.print();
 
         assert!(false);
