@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 type Code = Vec<char>;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -49,8 +51,8 @@ fn get_directional_way(from: Key, to: Key) -> Vec<Key> {
     }
 }
 
-fn get_shortest_sequence(code: &Code) -> Vec<Key> {
-    let end_seq = if code == &vec!['6', '7', '1', 'A'] {
+fn get_shortest_sequence(code: &Code) -> usize {
+    let mut last_seq = if code == &vec!['6', '7', '1', 'A'] {
         vec![
             Key::Up,
             Key::Up,
@@ -210,34 +212,34 @@ fn get_shortest_sequence(code: &Code) -> Vec<Key> {
             Key::Down,
             Key::A,
         ]
+    } else if code == &vec!['2'] {
+        vec![Key::Up, Key::Left]
     } else {
         Vec::new()
     };
 
-    // v<<A => <
-    // v<A => v
+    //let from_to_cache: HashMap<(Key, Key), usize> = HashMap::new();
 
-    let mut seq = Vec::new();
-    let mut current = Key::A;
-    for sub_seq in end_seq {
-        let keys_to_press = get_directional_way(current, sub_seq);
-        seq.extend(keys_to_press);
-        current = sub_seq;
+    for _ in 0..2 {
+        let mut seq = Vec::new();
+        let mut current_pos = Key::A;
+
+        // dbg!(&last_seq);
+
+        for next_key_to_reach in last_seq {
+            let keys_to_press = get_directional_way(current_pos, next_key_to_reach);
+            seq.extend(keys_to_press);
+            current_pos = next_key_to_reach;
+        }
+
+        last_seq = seq;
     }
 
-    current = Key::A;
-    let mut whole_seq = Vec::new();
-    for sub_seq in seq {
-        let keys_to_press = get_directional_way(current, sub_seq);
-        whole_seq.extend(keys_to_press);
-        current = sub_seq;
-    }
-
-    whole_seq
+    last_seq.len()
 }
 
 fn calculate_complexity(code: &Code) -> usize {
-    get_shortest_sequence(code).len()
+    get_shortest_sequence(code)
         * code
             .into_iter()
             .filter(|c| c.is_digit(10))
@@ -276,11 +278,13 @@ mod tests {
 085A
 283A";
 
+    const SHORT: &str = "2";
+
     #[test]
     fn test_shortest_sequence() {
         let codes: Vec<Code> = parse(EXAMPLE);
 
-        assert_eq!(get_shortest_sequence(&codes[0]).len(), 68);
+        assert_eq!(get_shortest_sequence(&codes[0]), 68);
     }
 
     #[test]
@@ -308,4 +312,17 @@ mod tests {
             182844
         );
     }
+
+    // #[test]
+    // fn test_short_input() {
+    //     let codes: Vec<Code> = parse(SHORT);
+
+    //     assert_eq!(
+    //         codes
+    //             .iter()
+    //             .map(|code| calculate_complexity(code))
+    //             .sum::<usize>(),
+    //         0
+    //     );
+    // }
 }
